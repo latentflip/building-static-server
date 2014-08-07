@@ -2,7 +2,7 @@ var hapi = require('hapi');
 var spawn = require('child_process').spawn;
 var exec = require('child_process').exec;
 var hoek = require('hoek');
-var watch = require('watch');
+var watchr = require('watchr');
 var Runner = require('./runner');
 
 //On change build, throttled by xms
@@ -37,19 +37,20 @@ module.exports = function (options) {
 
     var queueable = true;
 
-    runner.on('run:start', function () { queueable = false; })
-          .on('run:start', function () { queueable = true; });
+    runner.on('run:start', function () { queueable = false; console.log('OFF'); })
+          .on('run:end', function () { queueable = true;  console.log('ON'); });
 
     var queue = function (f) {
         if (queueable) {
             console.log('Updated', f);
             runner.queue();
+        } else {
+            console.log('Skipped', f);
         }
     };
 
-
     server.ext('onPreHandler', function (request, done) {
-        runner.delayIfQueued(done);
+        runner.delayIfRunning(done);
     });
 
     server.route({
@@ -62,13 +63,14 @@ module.exports = function (options) {
         }
     });
 
-    var watcher = watch.watchTree(config.cwd, {
-        ignoreDotFiles: true
-    }, function (f) {
-        if (typeof f === 'string') {
-            queue(f);
-        } else {
-           server.start(function (err) {
+    watchr.watch({
+        paths: [config.cwd],
+        ignoreDotFiles: true,
+        listener: queue,
+        catchupDelay: 0,
+        next: function (err) {
+            if (err) throw err;
+            server.start(function (err) {
                 if (err) throw err;
                 console.log('Started server on: ', server.info.uri);
             });

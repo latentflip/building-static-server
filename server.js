@@ -37,15 +37,13 @@ module.exports = function (options) {
 
     var queueable = true;
 
-    runner.on('run:start', function () { queueable = false; console.log('OFF'); })
-          .on('run:end', function () { queueable = true;  console.log('ON'); });
+    runner.on('run:start', function () { queueable = false; })
+          .on('run:end', function () { queueable = true; });
 
     var queue = function (f) {
         if (queueable) {
             console.log('Updated', f);
             runner.queue();
-        } else {
-            console.log('Skipped', f);
         }
     };
 

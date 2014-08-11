@@ -4,12 +4,16 @@ var exec = require('child_process').exec;
 var hoek = require('hoek');
 var watchr = require('watchr');
 var Runner = require('./runner');
+var livereload = require('./lr-notify');
+var path = require('path');
+var uniq = require('lodash.uniq');
 
 //On change build, throttled by xms
 //If change during build, rebuild
 //On request
 //  if clean build, and not building, serve
 //  if building, wait till built
+var LIVERELOADABLE_REGEX = /(css|html|js)$/;
 
 module.exports = function (options) {
     //TODO these should be in cli not here?
@@ -36,14 +40,38 @@ module.exports = function (options) {
     });
 
     var queueable = true;
+    var buildStart, toNotify = [];
 
     runner.on('run:start', function () { queueable = false; })
-          .on('run:end', function () { queueable = true; });
+          .on('run:end', function () { queueable = true; })
+          //For build timing
+          .on('run:start', function () {
+              console.log('Build started');
+              buildStart = Date.now();
+          })
+          .on('run:end', function () {
+              console.log('Built in', (Date.now() - buildStart)/1000 + 's');
+          })
+          //For build timing
+          .on('run:start', function () { })
+          .on('run:end', function () {
+              try {
+                  if (toNotify.length > 0) { livereload.notify(uniq(toNotify)); }
+                  toNotify = [];
+              } catch (e) {
+                  console.log(e);
+              }
+          });
 
-    var queue = function (f) {
+    var queue = function (changeType, f) {
+        var filename = path.basename(f);
+
         if (queueable) {
-            console.log('Updated', f);
+            console.log(changeType, f);
             runner.queue();
+        }
+        if (filename.match(LIVERELOADABLE_REGEX)) {
+            toNotify.push(filename);
         }
     };
 
@@ -72,6 +100,14 @@ module.exports = function (options) {
                 if (err) throw err;
                 console.log('Started server on: ', server.info.uri);
             });
+
+            livereload.startServer(function (err) {
+                if (err) throw err;
+            });
         }
     });
+
+    //trigger initial run
+    runner.queue();
+
 };

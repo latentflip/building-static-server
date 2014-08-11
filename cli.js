@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 var server = require('./server');
+var path = require('path');
 
 var argv = require('yargs')
             .usage('Usage: $0 -p [port]')
@@ -9,11 +10,15 @@ var argv = require('yargs')
             .alias('s', 'script')
                 .default('s', 'npm run build')
                 .describe('s', 'Build script to run')
+            .alias('d', 'cwd')
+                .default('d', '.')
+                .describe('d', 'Directory to serve')
             .alias('h', 'help')
             .help('h')
             .argv;
 
 server({
     port: argv.p,
-    script: argv.s
+    script: argv.s,
+    cwd: path.join(process.cwd(), argv.d)
 });

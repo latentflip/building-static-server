@@ -7,6 +7,7 @@ var Runner = require('./runner');
 var livereload = require('./lr-notify');
 var path = require('path');
 var uniq = require('lodash.uniq');
+var fs = require('fs');
 
 //On change build, throttled by xms
 //If change during build, rebuild
@@ -23,7 +24,17 @@ module.exports = function (options) {
         cwd: process.cwd()
     }, options || {});
 
-    var server = new hapi.Server('localhost', config.port);
+    var serverConfig = {};
+    if (config.tls) {
+      serverConfig.tls = {
+        key: fs.readFileSync(__dirname + '/certs/server.key'),
+        cert: fs.readFileSync(__dirname + '/certs/server.crt'),
+        ca: fs.readFileSync(__dirname + '/certs/ca.crt'),
+        passphrase: 'gulp'
+      };
+    }
+
+    var server = new hapi.Server('localhost', config.port, serverConfig);
 
     var lastRun;
     var running = false;

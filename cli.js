@@ -13,6 +13,8 @@ var argv = require('yargs')
             .alias('d', 'cwd')
                 .default('d', '.')
                 .describe('d', 'Directory to serve')
+            .alias('t', 'tls')
+                .describe('tls', 'Enable HTTPS')
             .alias('h', 'help')
             .help('h')
             .argv;
@@ -20,5 +22,6 @@ var argv = require('yargs')
 server({
     port: argv.p,
     script: argv.s,
-    cwd: path.join(process.cwd(), argv.d)
+    cwd: path.join(process.cwd(), argv.d),
+    tls: argv.t
 });

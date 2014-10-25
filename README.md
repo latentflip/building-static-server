@@ -38,3 +38,13 @@ I typically do it like this:
 Then I can just do `npm start` and things will start. It will watch all your files for changes and rebuild on them. (So you should make sure make is configured nicely to prevent excessive rebuilds).
 
 Add the [chrome livereload extension](https://chrome.google.com/webstore/detail/livereload/jnihajbhpnppcggbcgedagnkighmdlei?hl=en) for extra fun.
+
+## HTTPS
+
+Use the `tls` option to enable HTTPS:
+
+```bash
+building-static-server -p 3001 -s 'make' --tls
+```
+
+This uses a certificate authority, certificate and key file from the `certs` directory. Add `server.crt` to your keychain to avoid browser warnings.

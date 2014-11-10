@@ -101,14 +101,20 @@ module.exports.register = function (plugin, options, next) {
         listener: queue,
         catchupDelay: 0,
         next: function (err) {
-            if (err) throw err;
+            if (err) {
+                console.log(err);
+                throw err;
+            }
             //server.start(function (err) {
             //    if (err) throw err;
             //    console.log('Started server on: ', server.info.uri);
             //});
 
             livereload.startServer(function (err) {
-                if (err) throw err;
+                if (err) {
+                    console.log(err);
+                    throw err;
+                }
                 next();
             });
         }

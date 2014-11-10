@@ -18,18 +18,24 @@ module.exports.notify = function (filenames) {
 
 
 function startLivereload(done) {
+    console.log('Starting livereload');
     if (livereloadIsStarted) return done();
 
     var livereload = tinylr();
 
+    console.log('Actually starting livereload');
     try {
         livereload.listen(LIVERELOAD_PORT, function (err) {
-            if (err) return done(err);
+            if (err) {
+                console.log(err);
+                return done(err);
+            }
             console.log('Started livereload at: http://localhost:' + LIVERELOAD_PORT);
             livereloadIsStarted = true;
             done();
         });
     } catch (err) {
+        console.log('Livereload starting error', err);
         done(err);
     }
 }

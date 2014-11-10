@@ -122,6 +122,11 @@ module.exports.register = function (plugin, options, next) {
                 next();
             });
         }
+    }, function (err) {
+        if (err) {
+            console.log('Error starting watcher', err);
+            next(err);
+        }
     });
 };
 

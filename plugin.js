@@ -99,11 +99,15 @@ module.exports.register = function (plugin, options, next) {
     watchr.watch({
         paths: [config.cwd],
         ignoreDotFiles: true,
-        listener: queue,
+        listeners: {
+            changeListener: queue,
+            log: console.log.bind(console),
+            error: console.log.bind(console)
+        },
         catchupDelay: 0,
         next: function (err) {
             if (err) {
-                console.log(err);
+                console.log("Error starting file watcher", err);
                 throw err;
             }
             console.log('File watcher started');
@@ -121,11 +125,6 @@ module.exports.register = function (plugin, options, next) {
                 console.log('Building static server plugin loaded');
                 next();
             });
-        }
-    }, function (err) {
-        if (err) {
-            console.log('Error starting watcher', err);
-            next(err);
         }
     });
 };

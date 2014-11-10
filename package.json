@@ -1,6 +1,6 @@
 {
   "name": "building-static-server",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "Philip Roberts",
   "dependencies": {
     "async": "^0.9.0",
@@ -20,11 +20,11 @@
     "test": "test"
   },
   "license": "ISC",
-  "main": "server.js",
+  "main": "plugin.js",
   "bin": "./cli.js",
   "scripts": {
     "test": "tape test/*",
     "start": "./cli.js -p 3001 -s 'npm run build' -d ./demo",
-    "build": "make -C ./demo"
+    "build": "make -C ./demo; sleep 5"
   }
 }

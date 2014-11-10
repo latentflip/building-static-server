@@ -95,6 +95,7 @@ module.exports.register = function (plugin, options, next) {
         console.log('Already /{path*}');
     }
 
+    console.log('Starting file watcher for', config.cwd);
     watchr.watch({
         paths: [config.cwd],
         ignoreDotFiles: true,
@@ -105,16 +106,19 @@ module.exports.register = function (plugin, options, next) {
                 console.log(err);
                 throw err;
             }
+            console.log('File watcher started');
             //server.start(function (err) {
             //    if (err) throw err;
             //    console.log('Started server on: ', server.info.uri);
             //});
 
+            console.log('Starting livereload server');
             livereload.startServer(function (err) {
                 if (err) {
                     console.log(err);
                     throw err;
                 }
+                console.log('Building static server plugin loaded');
                 next();
             });
         }

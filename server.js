@@ -47,7 +47,7 @@ module.exports = function (options) {
                 logger.error("Error starting server", err);
                 throw err;
             }
-            
+
             logger.info('Started server on: ', server.info.uri);
         });
     });

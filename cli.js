@@ -15,6 +15,9 @@ var argv = require('yargs')
                 .describe('d', 'Directory to serve')
             .alias('t', 'tls')
                 .describe('tls', 'Enable HTTPS')
+            .alias('v', 'verbose')
+                .describe('verbose', 'Enable verbose logging')
+                .boolean('verbose')
             .alias('h', 'help')
             .help('h')
             .argv;
@@ -23,5 +26,6 @@ server({
     port: argv.p,
     script: argv.s,
     cwd: path.join(process.cwd(), argv.d),
-    tls: argv.t
+    tls: argv.t,
+    verbose: argv.v
 });

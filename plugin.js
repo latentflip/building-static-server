@@ -1,37 +1,33 @@
-var hapi = require('hapi');
 var spawn = require('child_process').spawn;
-var exec = require('child_process').exec;
 var hoek = require('hoek');
-var watchr = require('watchr');
 var Runner = require('./runner');
 var livereload = require('./lr-notify');
 var path = require('path');
 var uniq = require('lodash.uniq');
+var watch = require('watch');
+var bucker = require('bucker');
 
-//On change build, throttled by xms
-//If change during build, rebuild
-//On request
-//  if clean build, and not building, serve
-//  if building, wait till built
 var LIVERELOADABLE_REGEX = /(css|html|js)$/;
 
-module.exports.register = function (plugin, options, next) {
-    console.log('Requiring');
-    var server = plugin;
 
-    //TODO these should be in cli not here?
+module.exports.register = function (server, options, next) {
     var config = hoek.applyToDefaults({
-        port: 3000,
         script: 'npm run build',
-        cwd: process.cwd()
+        cwd: process.cwd(),
+        verbose: false
     }, options || {});
 
+    var logger = bucker.createLogger({
+        name: 'BSS',
+        level: config.verbose ? 'debug' : 'info'
+    });
 
     var lastRun;
     var running = false;
     var whenDone = [];
     var isClean = false;
 
+    logger.debug('Initializing task runner');
     var runner = new Runner({
         cmd: function (done) {
             var args = config.script.split(' ');
@@ -48,20 +44,18 @@ module.exports.register = function (plugin, options, next) {
           .on('run:end', function () { queueable = true; })
           //For build timing
           .on('run:start', function () {
-              console.log('Build started');
+              logger.info('Build started');
               buildStart = Date.now();
           })
           .on('run:end', function () {
-              console.log('Built in', (Date.now() - buildStart)/1000 + 's');
+              logger.info('Built in', (Date.now() - buildStart)/1000 + 's');
           })
-          //For build timing
-          .on('run:start', function () { })
           .on('run:end', function () {
               try {
                   if (toNotify.length > 0) { livereload.notify(uniq(toNotify)); }
                   toNotify = [];
               } catch (e) {
-                  console.log(e);
+                  logger.error('Error notifying live reload', e);
               }
           });
 
@@ -69,10 +63,14 @@ module.exports.register = function (plugin, options, next) {
         var filename = path.basename(f);
 
         if (queueable) {
-            console.log(changeType, f);
+            logger.info(changeType, f);
+            logger.debug("Got file change, queueing", changeType, f);
             runner.queue();
+        } else {
+            logger.debug("Got file change, but ignoring as not queueable", changeType, f);
         }
         if (filename.match(LIVERELOADABLE_REGEX)) {
+            logger.debug("Adding", filename, "to livereload notify list");
             toNotify.push(filename);
         }
     };
@@ -82,6 +80,7 @@ module.exports.register = function (plugin, options, next) {
     });
 
     try {
+        logger.debug("Adding * path to hapi server");
         server.route({
             path: '/{path*}',
             method: 'GET',
@@ -92,64 +91,35 @@ module.exports.register = function (plugin, options, next) {
             }
         });
     } catch (e) {
-        console.log('Already /{path*}');
+        logger.warn('Hapi server already has a /{path*}, ignoring');
     }
 
-    console.log('Starting file watcher for', config.cwd);
-    watchr.watch({
-        paths: [config.cwd],
+    logger.debug('Creating file monitor for', config.cwd);
+    watch.createMonitor(config.cwd, {
         ignoreDotFiles: true,
-        listeners: {
-            changeListener: queue,
-            log: console.log.bind(console),
-            error: console.log.bind(console)
-        },
-        catchupDelay: 0,
-        next: function (err) {
-            if (err) {
-                console.log("Error starting file watcher", err);
-                throw err;
-            }
-            console.log('File watcher started');
-            //server.start(function (err) {
-            //    if (err) throw err;
-            //    console.log('Started server on: ', server.info.uri);
-            //});
+        ignoreUnreadableDir: true,
+        ignoreDirectoryPattern: /node_modules/
+    }, function (monitor) {
+        logger.debug('Created file monitor.');
+        monitor.on('created', queue.bind(queue, 'created'));
+        monitor.on('changed', queue.bind(queue, 'changed'));
+        monitor.on('removed', queue.bind(queue, 'removed'));
 
-            console.log('Starting livereload server');
-            livereload.startServer(function (err) {
-                if (err) {
-                    console.log(err);
-                    throw err;
-                }
-                console.log('Building static server plugin loaded');
-                next();
-            });
-        }
+        logger.debug('Starting livereload server');
+        livereload.startServer(function (err) {
+            if (err) {
+                logger.warn('Error starting livereload server');
+                logger.warn('This is okay if you are running it already');
+                logger.error(err);
+            }
+
+            logger.debug('Building static server plugin loaded');
+            runner.queue();
+            next();
+        });
     });
 };
 
 module.exports.register.attributes = {
     pkg: require('./package.json')
 };
-
-//var server = new hapi.Server('localhost', 3000);
-//
-//server.route({
-//    method: 'get',
-//    path: '/foo',
-//    handler: function (req, rep) {
-//        rep('<!doctype html><link href="foo.css" rel="stylesheet"/>Hi!');
-//    }
-//});
-//
-//server.pack.register([module.exports], function (err) {
-//    if (err) throw err;
-//
-//    console.log('Required plugins');
-//
-//    server.start(function (err) {
-//        if (err) throw err;
-//        console.log("Started server at", server.info.uri);
-//    });
-//});

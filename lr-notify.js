@@ -2,6 +2,12 @@ var tinylr = require('tiny-lr');
 var request = require('request');
 var isTinylrRunning = require('./is-tinylr-running');
 var LIVERELOAD_PORT = 35729;
+var bucker = require('bucker');
+var logger = bucker.createLogger({
+    name: 'BSS',
+    level: 'debug'
+});
+
 
 var livereloadIsStarted = false;
 
@@ -12,8 +18,11 @@ module.exports.notify = function (filenames) {
         if (err) { throw err; }
 
         var url = 'http://localhost:' + LIVERELOAD_PORT + '/changed?files=' + filenames.join(',');
-        console.log('Notifying', url);
-        request.get(url);
+        logger.info("Notifying", url);
+        request.get(url, function (err) {
+            if (err) { logger.error(err); }
+            logger.debug("Notified");
+        });
     });
 };
 
@@ -25,7 +34,11 @@ function startLivereload(done) {
         if (err) { return done(err); }
         if (running) { return done(); }
 
-        var livereload = tinylr();
+        var livereload = tinylr({
+            liveCSS: false,
+            liveJs: false,
+            liveImg: true
+        });
 
         try {
             livereload.listen(LIVERELOAD_PORT, function (err) {
@@ -34,6 +47,7 @@ function startLivereload(done) {
                     return done(err);
                 }
                 livereloadIsStarted = true;
+                logger.info("Livereload ready");
                 done();
             });
         } catch (e) {

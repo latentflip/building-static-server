@@ -3,6 +3,7 @@ var hoek = require('hoek');
 var fs = require('fs');
 var bucker = require('bucker');
 var bssPlugin = require('./plugin');
+var colors = require('colors');
 
 module.exports = function (options) {
     var config = hoek.applyToDefaults({
@@ -42,14 +43,24 @@ module.exports = function (options) {
         }
 
         logger.debug('Starting server');
+        server.on('error', console.log);
         server.start(function (err) {
             if (err) {
                 logger.error("Error starting server", err);
-                throw err;
+                //throw err;
             }
 
             logger.info('Started server on: ', server.info.uri);
         });
     });
 
+    process.on('uncaughtException', function (err) {
+        if (err.code === 'EADDRINUSE') {
+            var killCmd = '`' + ('lsof -i tcp:' + config.port + ' -t | xargs kill -9').green + '`';
+            logger.error(('Another server is already running on port ' + config.port + '.').red);
+            logger.error('You should be able to kill it with: ' + killCmd + '.');
+            logger.error('Or just change the port you run this server on to something else.');
+            process.exit();
+        }
+    });
 };

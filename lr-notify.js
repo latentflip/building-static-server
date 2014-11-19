@@ -1,5 +1,6 @@
 var tinylr = require('tiny-lr');
 var request = require('request');
+var isTinylrRunning = require('./is-tinylr-running');
 var LIVERELOAD_PORT = 35729;
 
 var livereloadIsStarted = false;
@@ -20,18 +21,23 @@ module.exports.notify = function (filenames) {
 function startLivereload(done) {
     if (livereloadIsStarted) return done();
 
-    var livereload = tinylr();
+    isTinylrRunning(LIVERELOAD_PORT, function (err, running) {
+        if (err) { return done(err); }
+        if (running) { return done(); }
 
-    try {
-        livereload.listen(LIVERELOAD_PORT, function (err) {
-            if (err) {
-                console.log(err);
-                return done(err);
-            }
-            livereloadIsStarted = true;
-            done();
-        });
-    } catch (err) {
-        done(err);
-    }
+        var livereload = tinylr();
+
+        try {
+            livereload.listen(LIVERELOAD_PORT, function (err) {
+                if (err) {
+                    console.log(err);
+                    return done(err);
+                }
+                livereloadIsStarted = true;
+                done();
+            });
+        } catch (e) {
+            done(e);
+        }
+    });
 }

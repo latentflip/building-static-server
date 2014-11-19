@@ -4,8 +4,9 @@ var Runner = require('./runner');
 var livereload = require('./lr-notify');
 var path = require('path');
 var uniq = require('lodash.uniq');
-var watch = require('watch');
 var bucker = require('bucker');
+var colors = require('colors');
+var fileWatcher = require('./watcher');
 
 var LIVERELOADABLE_REGEX = /(css|html|js)$/;
 
@@ -32,8 +33,27 @@ module.exports.register = function (server, options, next) {
         cmd: function (done) {
             var args = config.script.split(' ');
             var cmd = args.shift();
-            var ps = spawn(cmd, args, { stdio: 'inherit' });
-            ps.on('close', done);
+            var ps = spawn(cmd, args);
+            var err = '';
+            ps.stderr.on('data', function (d) {
+                d = d.toString();
+                err += d;
+            });
+            ps.stdout.pipe(process.stdout);
+            ps.on('close', function () {
+                if (err.length > 0) {
+                    if (err.match(/npm ERR!/)) {
+                        err = err.substr(0, err.indexOf("npm ERR!"));
+                    }
+
+                    err.split('\n').map(function (line) {
+                        if (line.trim().length > 0) {
+                           logger.error(line.red);
+                        }
+                    });
+                }
+                done();
+            });
         }
     });
 
@@ -60,6 +80,7 @@ module.exports.register = function (server, options, next) {
           });
 
     var queue = function (changeType, f) {
+        console.log("queued", changeType, f);
         var filename = path.basename(f);
 
         if (queueable) {
@@ -95,22 +116,28 @@ module.exports.register = function (server, options, next) {
     }
 
     logger.debug('Creating file monitor for', config.cwd);
-    watch.createMonitor(config.cwd, {
-        ignoreDotFiles: true,
-        ignoreUnreadableDir: true,
-        ignoreDirectoryPattern: /node_modules/
-    }, function (monitor) {
-        logger.debug('Created file monitor.');
-        monitor.on('created', queue.bind(queue, 'created'));
-        monitor.on('changed', queue.bind(queue, 'changed'));
-        monitor.on('removed', queue.bind(queue, 'removed'));
+
+    var watcher = fileWatcher(process.cwd());
+
+    watcher.on('error', function (err) {
+        throw err;
+    });
+
+    watcher.on('log', function (level, msg) {
+        logger[level](msg);
+    });
+
+    watcher.on('ready', function () {
+        watcher.on('change', queue.bind(queue, 'changed'));
 
         logger.debug('Starting livereload server');
         livereload.startServer(function (err) {
             if (err) {
-                logger.warn('Error starting livereload server');
-                logger.warn('This is okay if you are running it already');
-                logger.error(err);
+                logger.error('Error starting livereload server.'.red);
+                logger.error('This is probably because you are running the livereload mac app.');
+                logger.error('Please close it and try again.');
+                logger.error("Full error: [" + err.code + "] " + err.message);
+                process.exit();
             }
 
             logger.debug('Building static server plugin loaded');

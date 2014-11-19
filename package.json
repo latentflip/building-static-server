@@ -5,14 +5,14 @@
   "dependencies": {
     "async": "^0.9.0",
     "bucker": "^1.0.11",
+    "colors": "^1.0.3",
     "hapi": "^6.4.0",
     "hoek": "^2.4.1",
     "lodash.debounce": "^2.4.1",
     "lodash.uniq": "^2.4.1",
+    "node-watch": "^0.3.4",
     "request": "^2.0.0",
     "tiny-lr": "^0.1.0",
-    "watch": "^0.13.0",
-    "watchr": "^2.4.11",
     "yargs": "^1.3.1"
   },
   "devDependencies": {
@@ -26,7 +26,7 @@
   "bin": "./cli.js",
   "scripts": {
     "test": "tape test/*",
-    "start": "./cli.js -p 3001 -s 'npm run build' -d ./demo -v",
-    "build": "make -C ./demo; sleep 5"
+    "start": "./cli.js -p 3001 -s 'npm run build' -d ./demo",
+    "build": "make -C ./demo"
   }
 }

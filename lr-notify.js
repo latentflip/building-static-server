@@ -2,12 +2,8 @@ var tinylr = require('tiny-lr');
 var request = require('request');
 var isTinylrRunning = require('./is-tinylr-running');
 var LIVERELOAD_PORT = 35729;
-var bucker = require('bucker');
-var logger = bucker.createLogger({
-    name: 'BSS',
-    level: 'debug'
-});
 
+var logger = require('./loggers');
 
 var livereloadIsStarted = false;
 
@@ -21,7 +17,7 @@ module.exports.notify = function (filenames) {
         logger.info("Notifying", url);
         request.get(url, function (err) {
             if (err) { logger.error(err); }
-            logger.debug("Notified");
+            logger.debug("Notified", url);
         });
     });
 };
@@ -35,7 +31,7 @@ function startLivereload(done) {
         if (running) { return done(); }
 
         var livereload = tinylr({
-            liveCSS: false,
+            liveCSS: true,
             liveJs: false,
             liveImg: true
         });

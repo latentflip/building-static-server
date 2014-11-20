@@ -2,6 +2,7 @@ var watch = require('node-watch');
 var fs = require('fs');
 var events = require('events');
 var async = require('async');
+var colors = require('colors');
 
 var ignoreFiles = [
     /npm\-debug\.log/
@@ -13,11 +14,11 @@ module.exports = function (dir) {
         for (var i in ignoreFiles) {
             if (f.match(ignoreFiles[i])) { return; }
         }
-        emitter.emit('log', 'debug', "Changed: " + f);
+        emitter.emit('log', 'changed: ' + f);
         emitter.emit('change', f);
     };
 
-    emitter.emit('log', 'debug', "Watching: " + dir);
+    emitter.emit('log', 'watching: ' + dir);
     watch(dir, { recursive: false }, emitChange);
 
     fs.readdir(dir, function (err, files) {
@@ -30,7 +31,7 @@ module.exports = function (dir) {
                 if (err) { return emitter.emit('error', err); }
 
                 if (stat.isDirectory()) {
-                    emitter.emit('log', 'debug', "Watching: " + dir);
+                    emitter.emit('log', 'debug', "watching: " + f.bold + " recursively");
                     watch(f, { recursive: true }, emitChange);
                 }
 

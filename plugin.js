@@ -1,15 +1,38 @@
 var spawn = require('child_process').spawn;
 var hoek = require('hoek');
 var Runner = require('./runner');
-var livereload = require('./lr-notify');
 var path = require('path');
 var uniq = require('lodash.uniq');
-var bucker = require('bucker');
 var colors = require('colors');
 var fileWatcher = require('./watcher');
+var fs = require('fs');
+var sculpt = require('sculpt');
+
+
+var timestamps = {};
+
+// If no files have ever been requested
+//   then we can't know which ones to livereload, so reload index.html
+// If files have been requested
+//   then we know that only files which have ever been requested are worth live reloading
+//   we can also map changed files -> live reloaded files, so that we can pre-notify itcn tthe future
+
+
+// Run build once
+// When done, start server
+// Watch files
+//      When a file changes
+//          Debounce a little
+//          Start the build
+//          When build is complete
+//              Trigger livereload with the files that changed during the build
+//              Store last build complete time
+//              Relase lock on file loading
+//      When a file changes
+//          If it was last changed before the last build ended, trigger a livereload for it
+//          Otherwise do the other stuff
 
 var LIVERELOADABLE_REGEX = /(css|html|js)$/;
-
 
 module.exports.register = function (server, options, next) {
     var config = hoek.applyToDefaults({
@@ -18,30 +41,59 @@ module.exports.register = function (server, options, next) {
         verbose: false
     }, options || {});
 
-    var logger = bucker.createLogger({
-        name: 'BSS',
-        level: config.verbose ? 'debug' : 'info'
-    });
+    if (options.verbose) {
+        process.env.DEBUG = "bss:*," + (process.env.DEBUG || "");
+    } else {
+        process.env.DEBUG = "bss:info,bss:warn,bss:error," + (process.env.DEBUG || "");
+    }
 
-    var lastRun;
-    var running = false;
-    var whenDone = [];
-    var isClean = false;
+    var debugPlugin   = require('debug')('bss:plugin');
+    var debugRunner   = require('debug')('bss:runner');
+    var debugWatcher  = require('debug')('bss:watch ');
+    var debugNotifier = require('debug')('bss:notify');
+    var debugReload   = require('debug')('bss:reload');
 
-    logger.debug('Initializing task runner');
+    var livereload = require('./lr-notify');
+    var logger = require('./loggers');
+
+    var filesRequested = {};
+    var filesLivereloaded = {};
+    var buildLock = false;
+    var lastBuildEnd = 0;
+
+    var buildStatus;
+
+    var resetBuildStatus = function () {
+        buildStatus = {
+            filesReloaded: {
+            }
+        };
+    };
+    resetBuildStatus();
+
+    debugRunner("starting");
     var runner = new Runner({
         cmd: function (done) {
+            debugRunner("spawning command");
             var args = config.script.split(' ');
             var cmd = args.shift();
             var ps = spawn(cmd, args);
             var err = '';
+
             ps.stderr.on('data', function (d) {
                 d = d.toString();
                 err += d;
             });
-            ps.stdout.pipe(process.stdout);
+
+            ps.stdout.pipe(sculpt.split('\n'))
+                     .pipe(sculpt.prepend('    '))
+                     .pipe(sculpt.append('\n'))
+                     .pipe(process.stdout);
+
             ps.on('close', function () {
+
                 if (err.length > 0) {
+                    debugRunner("command complete with errors");
                     if (err.match(/npm ERR!/)) {
                         err = err.substr(0, err.indexOf("npm ERR!"));
                     }
@@ -51,48 +103,76 @@ module.exports.register = function (server, options, next) {
                            logger.error(line.red);
                         }
                     });
+                } else {
+                    debugRunner("command complete");
                 }
                 done();
             });
         }
     });
 
-    var queueable = true;
-    var buildStart, toNotify = [];
+    var notifyFile = function(file) {
+        file = path.basename(file);
 
-    runner.on('run:start', function () { queueable = false; })
-          .on('run:end', function () { queueable = true; })
+        if (Object.keys(filesRequested).length === 0) {
+            debugNotifier('No files requested yet, triggering full refresh');
+            file = 'index.html';
+        }
+
+        if (file.match(/css$/) && !filesRequested[file]) {
+            return debugNotifier('File ' + file + ' has never been loaded, skipping');
+        }
+
+        if (buildStatus.filesReloaded[file]) {
+            return debugNotifier('File ' + file + ' already reloaded');
+        }
+
+        logger.info('Live reloading: ' + file);
+        debugNotifier('Live reloading: ' + file);
+        buildStatus.filesReloaded[file] = true;
+        filesLivereloaded[file] = true;
+        livereload.notify(file);
+    };
+
+    var buildStart;
+
+    runner.on('run:start', function () { buildLock = true; })
+          .on('run:end', function () { buildLock = false; })
           //For build timing
-          .on('run:start', function () {
-              logger.info('Build started');
+          .on('run:queued', function () {
+              logger.info('Build queued');
+              debugRunner('vvvvvvvvv queued new build vvvvvvvv');
+              resetBuildStatus();
               buildStart = Date.now();
           })
-          .on('run:end', function () {
-              logger.info('Built in', (Date.now() - buildStart)/1000 + 's');
+          .on('run:start', function () {
+              logger.info('Build started');
+              debugRunner('---------- started build ---------');
+
           })
           .on('run:end', function () {
-              try {
-                  if (toNotify.length > 0) { livereload.notify(uniq(toNotify)); }
-                  toNotify = [];
-              } catch (e) {
-                  logger.error('Error notifying live reload', e);
-              }
+              var runTime = Date.now() - buildStart;
+              var runTimeS = (runTime/1000).toString().substr(0,5) + 's';
+              logger.info('Built in', runTimeS);
+              debugRunner('^^^^^^^^^ build ran in ' + runTimeS + ' ^^^^^^^^');
+              lastBuildEnd = Date.now();
           });
 
-    var queue = function (changeType, f) {
-        console.log("queued", changeType, f);
-        var filename = path.basename(f);
-
-        if (queueable) {
-            logger.info(changeType, f);
-            logger.debug("Got file change, queueing", changeType, f);
-            runner.queue();
+    var handleChangedFile = function (changeType, f) {
+        debugWatcher(changeType + ': ' + f);
+        if (buildLock) {
+            debugWatcher('build already running');
         } else {
-            logger.debug("Got file change, but ignoring as not queueable", changeType, f);
-        }
-        if (filename.match(LIVERELOADABLE_REGEX)) {
-            logger.debug("Adding", filename, "to livereload notify list");
-            toNotify.push(filename);
+            isFileOlderThan(f, lastBuildEnd, function (err, older) {
+                if (err) { console.error(err); }
+
+                if (older) {
+                    debugWatcher(f + ' was from previous build, notifying');
+                    notifyFile(f);
+                } else {
+                    runner.queue();
+                }
+            });
         }
     };
 
@@ -101,7 +181,7 @@ module.exports.register = function (server, options, next) {
     });
 
     try {
-        logger.debug("Adding * path to hapi server");
+        debugPlugin("Adding * path to hapi server");
         server.route({
             path: '/{path*}',
             method: 'GET',
@@ -115,7 +195,16 @@ module.exports.register = function (server, options, next) {
         logger.warn('Hapi server already has a /{path*}, ignoring');
     }
 
-    logger.debug('Creating file monitor for', config.cwd);
+    server.servers[0].on('response', function (resp) {
+        var basename = path.basename(resp.path);
+        if (buildStatus.filesReloaded[basename]) {
+            debugReload(basename + " reloaded in " + (Date.now() - buildStart)/1000 + 's since build start');
+            logger.info(basename + " reloaded in " + (Date.now() - buildStart)/1000 + 's (since build start)');
+        }
+        if (basename.match(LIVERELOADABLE_REGEX)) {
+            filesRequested[basename] = true;
+        }
+    });
 
     var watcher = fileWatcher(process.cwd());
 
@@ -124,13 +213,13 @@ module.exports.register = function (server, options, next) {
     });
 
     watcher.on('log', function (level, msg) {
-        logger[level](msg);
+        debugWatcher(msg);
     });
 
     watcher.on('ready', function () {
-        watcher.on('change', queue.bind(queue, 'changed'));
+        watcher.on('change', handleChangedFile.bind(handleChangedFile, 'changed'));
 
-        logger.debug('Starting livereload server');
+        debugReload('Starting livereload server');
         livereload.startServer(function (err) {
             if (err) {
                 logger.error('Error starting livereload server.'.red);
@@ -140,9 +229,9 @@ module.exports.register = function (server, options, next) {
                 process.exit();
             }
 
-            logger.debug('Building static server plugin loaded');
+            debugPlugin('Building static server plugin loaded');
             runner.queue();
-            next();
+            runner.once('run:end', next);
         });
     });
 };
@@ -150,3 +239,10 @@ module.exports.register = function (server, options, next) {
 module.exports.register.attributes = {
     pkg: require('./package.json')
 };
+
+function isFileOlderThan(f, timestamp, done) {
+    fs.stat(f, function (err, stat) {
+        if (err) { return done(err); }
+        return done(null, stat.mtime < timestamp);
+    });
+}

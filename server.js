@@ -1,9 +1,7 @@
 var hapi = require('hapi');
 var hoek = require('hoek');
 var fs = require('fs');
-var bucker = require('bucker');
 var bssPlugin = require('./plugin');
-var colors = require('colors');
 
 module.exports = function (options) {
     var config = hoek.applyToDefaults({
@@ -24,19 +22,13 @@ module.exports = function (options) {
       };
     }
 
-    var logger = bucker.createLogger({
-        name: 'BSS',
-        level: config.verbose ? 'debug' : 'info'
-    });
-
-    logger.debug("Creating server", 'localhost:' + config.port, serverConfig);
     var server = new hapi.Server('localhost', config.port, serverConfig);
 
-    logger.debug("Registering BSS plugin");
     server.pack.register({
         plugin: bssPlugin,
         options: options
     }, function (err) {
+        var logger = require('./loggers');
         if (err) {
             logger.error("Error loading plugin:", err);
             throw err;

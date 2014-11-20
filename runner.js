@@ -25,6 +25,7 @@ Runner.prototype.queue = function (done) {
     }
 
     if (!this._running) {
+        this.emit('run:queued');
         this._running = true;
         this._run();
     }

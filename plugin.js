@@ -33,6 +33,8 @@ var timestamps = {};
 //          Otherwise do the other stuff
 
 var LIVERELOADABLE_REGEX = /(css|html|js)$/;
+var EXTRA_LIVERELOAD_MAP = {};
+EXTRA_LIVERELOAD_MAP[/jade$/] = 'index.html';
 
 module.exports.register = function (server, options, next) {
     var config = hoek.applyToDefaults({
@@ -127,11 +129,27 @@ module.exports.register = function (server, options, next) {
             return debugNotifier('File ' + file + ' already reloaded');
         }
 
-        logger.info('Live reloading: ' + file);
-        debugNotifier('Live reloading: ' + file);
-        buildStatus.filesReloaded[file] = true;
-        filesLivereloaded[file] = true;
-        livereload.notify(file);
+        if (file.match(LIVERELOADABLE_REGEX)) {
+            logger.info('Live reloading: ' + file);
+            debugNotifier('Live reloading: ' + file);
+            buildStatus.filesReloaded[file] = true;
+            filesLivereloaded[file] = true;
+            livereload.notify(file);
+            return;
+        }
+
+        debugNotifier('Checking ' + file + ' against extra livereload config');
+        Object.keys(EXTRA_LIVERELOAD_MAP).forEach(function (key) {
+            var reloadFile = EXTRA_LIVERELOAD_MAP[key];
+            var regex = new RegExp(key.slice(1,-1));
+            if (file.match(regex)) {
+                debugNotifier(file + ' matches ' + regex + ': reloading ' + reloadFile);
+                notifyFile(reloadFile);
+            } else {
+                debugNotifier(file + ' does not match ' + regex);
+            }
+        });
+
     };
 
     var buildStart;
@@ -171,6 +189,7 @@ module.exports.register = function (server, options, next) {
                     notifyFile(f);
                 } else {
                     runner.queue();
+                    notifyFile(f);
                 }
             });
         }
@@ -212,7 +231,7 @@ module.exports.register = function (server, options, next) {
         throw err;
     });
 
-    watcher.on('log', function (level, msg) {
+    watcher.on('log', function (msg) {
         debugWatcher(msg);
     });
 

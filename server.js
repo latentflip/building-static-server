@@ -22,10 +22,11 @@ module.exports = function (options) {
       };
     }
 
-    var server = new hapi.Server('localhost', config.port, serverConfig);
+    var server = new hapi.Server(serverConfig);
+    server.connection({ host: 'localhost', port: config.port });
 
-    server.pack.register({
-        plugin: bssPlugin,
+    server.register({
+        register: bssPlugin,
         options: options
     }, function (err) {
         var logger = require('./loggers');

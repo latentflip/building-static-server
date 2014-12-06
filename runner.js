@@ -43,7 +43,7 @@ Runner.prototype._run = function () {
 
 Runner.prototype.delayIfRunning = function (done) {
     if (this._running) {
-        this.callbacks.push(done.continue);
+        this.callbacks.push(done.continue.bind(done));
     } else {
         done.continue();
     }

@@ -214,7 +214,7 @@ module.exports.register = function (server, options, next) {
         logger.warn('Hapi server already has a /{path*}, ignoring');
     }
 
-    server.servers[0].on('response', function (resp) {
+    server.on('response', function (resp) {
         var basename = path.basename(resp.path);
         if (buildStatus.filesReloaded[basename]) {
             debugReload(basename + " reloaded in " + (Date.now() - buildStart)/1000 + 's since build start');

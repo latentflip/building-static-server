@@ -103,5 +103,4 @@ test('just runs the callback if not running', function (t) {
             t.equal(runCount, 1);
         });
     });
-    
 });

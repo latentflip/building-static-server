@@ -42,10 +42,13 @@ Runner.prototype._run = function () {
 };
 
 Runner.prototype.delayIfRunning = function (done) {
+    if (done && done.continue && typeof done.continue === 'function') {
+        done = done.continue.bind(done);
+    }
     if (this._running) {
-        this.callbacks.push(done.continue.bind(done));
+        this.callbacks.push(done);
     } else {
-        done.continue();
+        done();
     }
 };
 
